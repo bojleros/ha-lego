@@ -1,0 +1,41 @@
+name: LEGO INWX Certificates
+version: "0.1.0"
+slug: lego-inwx
+description: Automate Let's Encrypt certificate issuance with lego and the INWX DNS challenge.
+url: https://github.com/deg0nz/letsencrypt-ha-plugin
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: services
+boot: auto
+init: false
+map:
+  - ssl:rw
+options:
+  email: ""
+  domains: []
+  key_type: rsa2048
+  cron_schedule: "0 3 * * *"
+  renew_days: 30
+  lego_path: /data/lego
+  staging: false
+  inwx_username: ""
+  inwx_password: ""
+  inwx_shared_secret: ""
+  inwx_totp: ""
+schema:
+  email: str
+  domains:
+    - str
+  key_type: list(rsa2048|rsa4096|ec256|ec384)
+  cron_schedule: str
+  renew_days: int(1,)
+  lego_path: str
+  staging: bool
+  inwx_username: str
+  inwx_password: password
+  inwx_shared_secret: str?
+  inwx_totp: str?

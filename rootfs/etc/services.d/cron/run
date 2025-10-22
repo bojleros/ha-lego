@@ -1,0 +1,2 @@
+#!/usr/bin/with-contenv sh
+exec crond -f -l 2 -c /etc/crontabs
