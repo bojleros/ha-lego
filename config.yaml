@@ -11,7 +11,7 @@ arch:
   - i386
 startup: services
 boot: auto
-init: false
+init: true
 map:
   - ssl:rw
 options:
