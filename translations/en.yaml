@@ -1,0 +1,35 @@
+---
+configuration:
+  email:
+    name: ACME account email
+    description: Address used for ACME registration and expiry notifications.
+  domains:
+    name: Certificate domains
+    description: Domains (including wildcards) requested from Let's Encrypt.
+  key_type:
+    name: Key type
+    description: Private key algorithm used for newly issued certificates.
+  cron_schedule:
+    name: Renewal schedule
+    description: Cron expression controlling when lego performs renewals.
+  renew_days:
+    name: Renewal threshold (days)
+    description: Renew certificates when they expire within this many days.
+  lego_path:
+    name: Lego data path
+    description: Directory used to store lego account data and cache.
+  staging:
+    name: Use Let's Encrypt staging
+    description: Issue test certificates against the staging environment.
+  dns_provider:
+    name: Lego DNS provider
+    description: Provider identifier from the lego DNS documentation (e.g. cloudflare, inwx).
+  dns_provider_env:
+    name: DNS provider environment variables
+    description: Add KEY=VALUE entries required by the selected lego DNS provider.
+  restart_addon_slug:
+    name: Dependent add-on to restart
+    description: Optional add-on slug to restart after certificates change.
+  force_initial_request:
+    name: Force fresh issuance
+    description: Remove existing lego state and perform a full issuance on next start.
