@@ -1,8 +1,10 @@
 name: LEGO INWX Certificates
-version: "0.1.0"
+version: "0.1.0-alpha.3"
 slug: lego-inwx
 description: Automate Let's Encrypt certificate issuance with lego and the INWX DNS challenge.
 url: https://github.com/deg0nz/letsencrypt-ha-plugin
+hassio_api: true
+hassio_role: manager
 arch:
   - aarch64
   - amd64
@@ -11,7 +13,7 @@ arch:
   - i386
 startup: services
 boot: auto
-init: true
+init: false
 map:
   - ssl:rw
 options:
@@ -26,6 +28,8 @@ options:
   inwx_password: ""
   inwx_shared_secret: ""
   inwx_totp: ""
+  restart_addon_slug: ""
+  force_initial_request: false
 schema:
   email: str
   domains:
@@ -39,3 +43,5 @@ schema:
   inwx_password: password
   inwx_shared_secret: str?
   inwx_totp: str?
+  restart_addon_slug: str?
+  force_initial_request: bool

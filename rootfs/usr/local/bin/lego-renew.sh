@@ -1,4 +1,4 @@
-#!/usr/bin/with-contenv bash
+#!/usr/bin/with-contenv bashio
 set -euo pipefail
 
 umask 077
@@ -6,6 +6,11 @@ umask 077
 LEGO_BIN=${LEGO_BIN:-/usr/bin/lego}
 CONFIG_ENV_FILE=${CONFIG_ENV_FILE:-/var/run/lego-config.env}
 ACME_STAGING_ENDPOINT="https://acme-staging-v02.api.letsencrypt.org/directory"
+
+CERT_UPDATED=false
+FORCE_INITIAL_REQUEST=false
+FORCE_INITIAL_REQUEST_MARKER=""
+FORCE_INITIAL_REQUEST_TRIGGERED="false"
 
 info() {
     echo "[INFO] $*"
@@ -35,6 +40,17 @@ require_directory() {
     local description="$2"
     if [ ! -d "$path" ]; then
         error "${description} directory ${path} is not accessible"
+    fi
+}
+
+certificate_hash() {
+    local sanitized="$1"
+    local path="${LEGO_PATH}/certificates/${sanitized}.crt"
+
+    if [ -f "${path}" ]; then
+        sha256sum "${path}" | awk '{print $1}'
+    else
+        echo "missing"
     fi
 }
 
@@ -68,12 +84,23 @@ load_config() {
     INWX_PASSWORD=${INWX_PASSWORD:-}
     INWX_SHARED_SECRET=${INWX_SHARED_SECRET:-}
     INWX_TOTP=${INWX_TOTP:-}
+    RESTART_ADDON_SLUG=${RESTART_ADDON_SLUG:-}
+    FORCE_INITIAL_REQUEST=${FORCE_INITIAL_REQUEST:-false}
+    FORCE_INITIAL_REQUEST_MARKER="${LEGO_PATH}/.force_initial_request_completed"
 
     if [ -z "${INWX_USERNAME}" ]; then
         error "Configuration option 'inwx_username' must be set"
     fi
     if [ -z "${INWX_PASSWORD}" ]; then
         error "Configuration option 'inwx_password' must be set"
+    fi
+
+    if [ -n "${RESTART_ADDON_SLUG}" ]; then
+        info "Dependent add-on restart configured for ${RESTART_ADDON_SLUG}"
+    fi
+
+    if [ "${FORCE_INITIAL_REQUEST}" = "true" ]; then
+        info "Force initial request requested; lego state will be reset before issuance if not already completed"
     fi
 }
 
@@ -146,12 +173,65 @@ ensure_lego_path() {
     chmod 700 "${LEGO_PATH}"
 }
 
+reset_lego_state_if_requested() {
+    if [ "${FORCE_INITIAL_REQUEST}" != "true" ]; then
+        return
+    fi
+
+    local marker="${FORCE_INITIAL_REQUEST_MARKER:-}"
+    if [ -n "${marker}" ] && [ -f "${marker}" ]; then
+        info "Force initial request already completed; retaining existing lego state"
+        return
+    fi
+
+    if [ -z "${LEGO_PATH}" ] || [ "${LEGO_PATH}" = "/" ]; then
+        error "Refusing to remove lego state: invalid path '${LEGO_PATH}'"
+    fi
+
+    FORCE_INITIAL_REQUEST_TRIGGERED="true"
+    info "Removing existing lego state under ${LEGO_PATH}"
+    rm -rf -- "${LEGO_PATH}"
+    info "Set the 'force_initial_request' option back to false after this run to avoid repeated resets"
+}
+
+mark_force_initial_request_completed() {
+    if [ "${FORCE_INITIAL_REQUEST}" != "true" ]; then
+        return
+    fi
+
+    if [ "${FORCE_INITIAL_REQUEST_TRIGGERED}" != "true" ]; then
+        return
+    fi
+
+    local marker="${FORCE_INITIAL_REQUEST_MARKER:-}"
+    if [ -z "${marker}" ]; then
+        return
+    fi
+
+    if touch "${marker}"; then
+        chmod 600 "${marker}" || true
+        info "Force initial request complete; future runs will use the configured action"
+    else
+        warn "Unable to record completion of forced initial request at ${marker}"
+    fi
+}
+
 run_command() {
     local action="$1"
     local primary_sanitized
     primary_sanitized=$(sanitize_domain "${DOMAINS[0]}")
     local cert_path="${LEGO_PATH}/certificates/${primary_sanitized}.crt"
     local key_path="${LEGO_PATH}/certificates/${primary_sanitized}.key"
+    local before_hashes=()
+    local domain
+
+    CERT_UPDATED=false
+
+    for domain in "${DOMAINS[@]}"; do
+        local sanitized
+        sanitized=$(sanitize_domain "${domain}")
+        before_hashes+=("$(certificate_hash "${sanitized}")")
+    done
 
     case "${action}" in
         run)
@@ -175,10 +255,40 @@ run_command() {
             error "Unknown action '${action}'"
             ;;
     esac
+
+    local idx=0
+    for domain in "${DOMAINS[@]}"; do
+        local sanitized
+        sanitized=$(sanitize_domain "${domain}")
+        local after_hash
+        after_hash=$(certificate_hash "${sanitized}")
+        if [ "${before_hashes[${idx}]}" != "${after_hash}" ]; then
+            CERT_UPDATED=true
+            break
+        fi
+        idx=$((idx + 1))
+    done
+}
+
+restart_dependent_addon() {
+    if [ -z "${RESTART_ADDON_SLUG:-}" ]; then
+        return
+    fi
+
+    if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
+        warn "Supervisor token unavailable; cannot restart ${RESTART_ADDON_SLUG}"
+        return
+    fi
+
+    info "Requesting restart of add-on ${RESTART_ADDON_SLUG}"
+    if ! bashio::api.supervisor "POST" "/addons/${RESTART_ADDON_SLUG}/restart"; then
+        warn "Failed to restart add-on ${RESTART_ADDON_SLUG}"
+    fi
 }
 
 main() {
     load_config
+    reset_lego_state_if_requested
     ensure_lego_path
     export_dns_credentials
     build_command
@@ -201,8 +311,32 @@ main() {
         esac
     fi
 
+    local marker="${FORCE_INITIAL_REQUEST_MARKER:-}"
+    local should_force_run="false"
+    if [ "${FORCE_INITIAL_REQUEST}" = "true" ]; then
+        if [ -n "${marker}" ] && [ -f "${marker}" ]; then
+            info "Force initial request already satisfied; continuing with requested action '${action}'"
+        else
+            should_force_run="true"
+        fi
+    fi
+
+    if [ "${should_force_run}" = "true" ]; then
+        if [ "${action}" != "run" ]; then
+            info "Force initial request overriding requested action '${action}' with 'run'"
+        fi
+        FORCE_INITIAL_REQUEST_TRIGGERED="true"
+        action="run"
+    fi
+
     run_command "${action}"
+    mark_force_initial_request_completed
     copy_certificates
+    if [ "${CERT_UPDATED}" = "true" ]; then
+        restart_dependent_addon
+    elif [ -n "${RESTART_ADDON_SLUG:-}" ]; then
+        info "No certificate changes detected; skipping restart of ${RESTART_ADDON_SLUG}"
+    fi
 }
 
 main "$@"

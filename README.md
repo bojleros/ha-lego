@@ -28,6 +28,8 @@ Set the options from the Home Assistant add-on UI. All INWX credentials are stor
 | `inwx_password` | INWX account password. Required. |
 | `inwx_shared_secret` | Optional INWX shared secret for TOTP-based 2FA. |
 | `inwx_totp` | Optional static TOTP pin for INWX. |
+| `restart_addon_slug` | Optional slug of another add-on to restart after certificate updates. Leave blank to disable. |
+| `force_initial_request` | When `true`, wipe existing lego state and force a fresh certificate issuance on next start. |
 
 Certificates are copied into `/ssl` with filenames based on the domain (wildcards are converted to `_`). For example, `example.com` produces:
 
@@ -43,3 +45,15 @@ A wildcard such as `*.example.com` is stored as `/ssl/_.example.com.*`.
 On startup the add-on validates the configuration, runs an initial issuance or renewal, and then starts `crond` to execute future renewals on the specified schedule. Renewal logs are written to the add-on log.
 
 If the initial certificate issuance fails (for example due to incorrect credentials or DNS propagation issues), the add-on will stop so the error can be corrected. Update the configuration and start the add-on again once the issue is resolved.
+
+## Restarting dependent add-ons
+
+Set `restart_addon_slug` when you want Home Assistant to restart another add-on immediately after certificates are renewed. The restart is triggered only if any certificate file actually changes, so dependent services are not bounced unnecessarily.
+
+The slug is the identifier Home Assistant assigns to each add-on. Run `ha addons list` in the Home Assistant CLI and copy the value in the `slug` column for the add-on you want to restart.
+
+Enter that slug (for example `core_nginx_proxy`) in the `restart_addon_slug` option for this add-on. Leave the field empty if no restart should be performed.
+
+## Forcing a fresh issuance
+
+Set `force_initial_request` to `true` when you need to discard the existing ACME account data or certificates and obtain a completely new set. On the next start the add-on deletes the contents of the configured `lego_path`, performs a full issuance run, and then resumes normal scheduled renewals. The directory is recreated before lego runs, so remember to set the option back to `false` once the fresh certificates have been obtained.

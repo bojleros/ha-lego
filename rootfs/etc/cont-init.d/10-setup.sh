@@ -64,6 +64,19 @@ if [ -z "${STAGING}" ]; then
     STAGING="false"
 fi
 
+RESTART_ADDON_SLUG=$(sanitize_optional "$(bashio::config 'restart_addon_slug')")
+if [ -n "${RESTART_ADDON_SLUG}" ]; then
+    bashio::log.info "Configured to restart add-on after certificate updates: ${RESTART_ADDON_SLUG}"
+fi
+
+FORCE_INITIAL_REQUEST=$(sanitize_optional "$(bashio::config 'force_initial_request')")
+if [ -z "${FORCE_INITIAL_REQUEST}" ]; then
+    FORCE_INITIAL_REQUEST="false"
+fi
+if bashio::var.true "${FORCE_INITIAL_REQUEST}"; then
+    bashio::log.warning "Force initial request enabled; existing lego state will be removed on startup"
+fi
+
 INWX_USERNAME=$(bashio::config 'inwx_username')
 INWX_PASSWORD=$(bashio::config 'inwx_password')
 INWX_SHARED_SECRET=$(sanitize_optional "$(bashio::config 'inwx_shared_secret')")
@@ -83,6 +96,8 @@ mkdir -p "$(dirname "${CONFIG_ENV_FILE}")"
     printf 'INWX_PASSWORD=%q\n' "${INWX_PASSWORD}"
     printf 'INWX_SHARED_SECRET=%q\n' "${INWX_SHARED_SECRET}"
     printf 'INWX_TOTP=%q\n' "${INWX_TOTP}"
+    printf 'RESTART_ADDON_SLUG=%q\n' "${RESTART_ADDON_SLUG}"
+    printf 'FORCE_INITIAL_REQUEST=%q\n' "${FORCE_INITIAL_REQUEST}"
     printf 'DOMAINS=('
     if [ "$DOMAINS_LENGTH" -gt 0 ]; then
         printf '\n'
