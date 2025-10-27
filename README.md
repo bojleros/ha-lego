@@ -1,5 +1,7 @@
 # LEGO DNS Certificates Home Assistant Add-on
 
+[![Add to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fdeg0nz%2Fha-lego)
+
 This Home Assistant add-on provisions and renews Let's Encrypt certificates using [lego](https://go-acme.github.io/lego/) with DNS-based challenges. Certificates are stored persistently in the add-on data directory and copied into Home Assistant's `/ssl` volume for use by other services.
 
 ## Features
