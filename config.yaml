@@ -1,5 +1,5 @@
 name: LEGO DNS Certificates
-version: "0.1.0-alpha.5"
+version: "1.0.0"
 slug: lego-dns
 description: Automate Let's Encrypt certificate issuance with lego using DNS challenges.
 url: https://github.com/deg0nz/ha-lego
