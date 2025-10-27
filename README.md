@@ -1,14 +1,14 @@
-# LEGO INWX Certificates Home Assistant Add-on
+# LEGO DNS Certificates Home Assistant Add-on
 
-This Home Assistant add-on provisions and renews Let's Encrypt certificates using [lego](https://go-acme.github.io/lego/) with the INWX DNS challenge. Certificates are stored persistently in the add-on data directory and copied into Home Assistant's `/ssl` volume for use by other services.
+This Home Assistant add-on provisions and renews Let's Encrypt certificates using [lego](https://go-acme.github.io/lego/) with DNS-based challenges. Certificates are stored persistently in the add-on data directory and copied into Home Assistant's `/ssl` volume for use by other services.
 
 ## Features
 
-- Uses lego's ACME client with the INWX DNS provider
+- Uses lego's ACME client with any supported DNS provider
 - Supports multiple domains and wildcard certificates
 - Runs automated renewals on a configurable cron schedule
 - Copies certificate, key, issuer, and full chain files into `/ssl`
-- Supports INWX two-factor authentication (shared secret or TOTP pin)
+- Accepts provider-specific environment variables as documented by lego
 - Optional staging mode for testing against Let's Encrypt's staging endpoint
 
 ## Configuration
@@ -24,10 +24,8 @@ Set the options from the Home Assistant add-on UI. All INWX credentials are stor
 | `renew_days` | Renew when certificates expire within this many days. Defaults to `30`. |
 | `lego_path` | Internal directory for lego state. Defaults to `/data/lego`. |
 | `staging` | When `true`, use Let's Encrypt's staging environment. Useful for testing. |
-| `inwx_username` | INWX account username (usually the account number). Required. |
-| `inwx_password` | INWX account password. Required. |
-| `inwx_shared_secret` | Optional INWX shared secret for TOTP-based 2FA. |
-| `inwx_totp` | Optional static TOTP pin for INWX. |
+| `dns_provider` | lego DNS provider identifier (see [lego docs](https://go-acme.github.io/lego/dns/index.html)). Defaults to `inwx`. |
+| `dns_provider_env` | List of `KEY=VALUE` entries exported for the DNS provider (for example `CLOUDFLARE_API_TOKEN=...`). |
 | `restart_addon_slug` | Optional slug of another add-on to restart after certificate updates. Leave blank to disable. |
 | `force_initial_request` | When `true`, wipe existing lego state and force a fresh certificate issuance on next start. |
 
@@ -57,3 +55,28 @@ Enter that slug (for example `core_nginx_proxy`) in the `restart_addon_slug` opt
 ## Forcing a fresh issuance
 
 Set `force_initial_request` to `true` when you need to discard the existing ACME account data or certificates and obtain a completely new set. On the next start the add-on deletes the contents of the configured `lego_path`, performs a full issuance run, and then resumes normal scheduled renewals. The directory is recreated before lego runs, so remember to set the option back to `false` once the fresh certificates have been obtained.
+A few tips for configuring providers:
+
+- Use the provider name exactly as lego documents it (for example `cloudflare`, `route53`, `inwx`).
+- Add one `KEY=VALUE` entry per required environment variable. Every item is exported before lego runs.
+- Avoid wrapping values in quotes; entered text is used as-is.
+
+### Example: Cloudflare API token
+
+```
+dns_provider: cloudflare
+dns_provider_env:
+  - CLOUDFLARE_DNS_API_TOKEN=cf_example_token
+```
+
+### Example: INWX with shared secret
+
+```
+dns_provider: inwx
+dns_provider_env:
+  - INWX_USERNAME=12345
+  - INWX_PASSWORD=secretpass
+  - INWX_SHARED_SECRET=sharedsecret
+```
+
+Refer to the [lego DNS documentation](https://go-acme.github.io/lego/dns/index.html) for the exact set of variables required by your chosen provider.

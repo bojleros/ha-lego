@@ -6,6 +6,8 @@ umask 077
 LEGO_BIN=${LEGO_BIN:-/usr/bin/lego}
 CONFIG_ENV_FILE=${CONFIG_ENV_FILE:-/var/run/lego-config.env}
 ACME_STAGING_ENDPOINT="https://acme-staging-v02.api.letsencrypt.org/directory"
+ACME_PRODUCTION_HOST="acme-v02.api.letsencrypt.org"
+ACME_STAGING_HOST="acme-staging-v02.api.letsencrypt.org"
 
 CERT_UPDATED=false
 FORCE_INITIAL_REQUEST=false
@@ -79,21 +81,27 @@ load_config() {
     LEGO_PATH=${LEGO_PATH:-/data/lego}
     RENEW_DAYS=${RENEW_DAYS:-30}
     STAGING=${STAGING:-false}
+    if [ "${STAGING}" = "true" ]; then
+        LEGO_SERVER_HOST="${ACME_STAGING_HOST}"
+    else
+        LEGO_SERVER_HOST="${ACME_PRODUCTION_HOST}"
+    fi
 
-    INWX_USERNAME=${INWX_USERNAME:-}
-    INWX_PASSWORD=${INWX_PASSWORD:-}
-    INWX_SHARED_SECRET=${INWX_SHARED_SECRET:-}
-    INWX_TOTP=${INWX_TOTP:-}
+    DNS_PROVIDER=${DNS_PROVIDER:-}
+    if [ -z "${DNS_PROVIDER}" ]; then
+        error "Configuration option 'dns_provider' must be set"
+    fi
+
+    if ! declare -p DNS_ENV_VARS >/dev/null 2>&1; then
+        DNS_ENV_VARS=()
+    fi
+    if ! declare -p DNS_ENV_KEYS >/dev/null 2>&1; then
+        DNS_ENV_KEYS=()
+    fi
+
     RESTART_ADDON_SLUG=${RESTART_ADDON_SLUG:-}
     FORCE_INITIAL_REQUEST=${FORCE_INITIAL_REQUEST:-false}
     FORCE_INITIAL_REQUEST_MARKER="${LEGO_PATH}/.force_initial_request_completed"
-
-    if [ -z "${INWX_USERNAME}" ]; then
-        error "Configuration option 'inwx_username' must be set"
-    fi
-    if [ -z "${INWX_PASSWORD}" ]; then
-        error "Configuration option 'inwx_password' must be set"
-    fi
 
     if [ -n "${RESTART_ADDON_SLUG}" ]; then
         info "Dependent add-on restart configured for ${RESTART_ADDON_SLUG}"
@@ -105,7 +113,7 @@ load_config() {
 }
 
 build_command() {
-    LEGO_CMD=("${LEGO_BIN}" "--path" "${LEGO_PATH}" "--email" "${EMAIL}" "--accept-tos" "--dns" "inwx" "--key-type" "${KEY_TYPE}")
+    LEGO_CMD=("${LEGO_BIN}" "--path" "${LEGO_PATH}" "--email" "${EMAIL}" "--accept-tos" "--dns" "${DNS_PROVIDER}" "--key-type" "${KEY_TYPE}")
 
     if [ "${STAGING}" = "true" ]; then
         LEGO_CMD+=("--server" "${ACME_STAGING_ENDPOINT}")
@@ -117,25 +125,54 @@ build_command() {
 }
 
 export_dns_credentials() {
-    export INWX_USERNAME
-    export INWX_PASSWORD
+    local entry
+    local key
+    local value
 
-    if [ -n "${INWX_SHARED_SECRET}" ]; then
-        export INWX_SHARED_SECRET
-    else
-        unset INWX_SHARED_SECRET || true
+    if [ "${#DNS_ENV_KEYS[@]}" -gt 0 ]; then
+        for key in "${DNS_ENV_KEYS[@]}"; do
+            if [ -n "${key}" ]; then
+                unset "${key}" || true
+            fi
+        done
     fi
 
-    if [ -n "${INWX_TOTP}" ]; then
-        export INWX_TOTP_PIN="${INWX_TOTP}"
-    else
-        unset INWX_TOTP_PIN || true
+    if [ "${#DNS_ENV_VARS[@]}" -eq 0 ]; then
+        warn "No dns_provider_env entries configured; provider ${DNS_PROVIDER} may require credentials"
+        return
     fi
+
+    info "Exporting DNS provider environment variables for ${DNS_PROVIDER}: ${DNS_ENV_KEYS[*]}"
+
+    for entry in "${DNS_ENV_VARS[@]}"; do
+        key="${entry%%=*}"
+        value="${entry#*=}"
+        if [ -z "${key}" ]; then
+            continue
+        fi
+        export "${key}=${value}"
+    done
 }
 
 sanitize_domain() {
     local domain="$1"
     echo "${domain//\*/_}"
+}
+
+lego_account_registered() {
+    local account_root
+    local account_dir
+
+    account_root="${LEGO_PATH}/accounts/${LEGO_SERVER_HOST}"
+    account_dir="${account_root}/${EMAIL}"
+
+    if [ -f "${account_dir}/account.json" ]; then
+        return 0
+    fi
+    if [ -f "${account_dir}/keys/${EMAIL}.key" ]; then
+        return 0
+    fi
+    return 1
 }
 
 copy_certificates() {
@@ -326,6 +363,11 @@ main() {
             info "Force initial request overriding requested action '${action}' with 'run'"
         fi
         FORCE_INITIAL_REQUEST_TRIGGERED="true"
+        action="run"
+    fi
+
+    if [ "${action}" != "run" ] && ! lego_account_registered; then
+        info "No ACME account registration for ${EMAIL} on ${LEGO_SERVER_HOST}; switching action to 'run'"
         action="run"
     fi
 

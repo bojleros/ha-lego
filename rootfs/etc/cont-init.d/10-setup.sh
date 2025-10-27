@@ -30,14 +30,6 @@ if ! bashio::config.has_value 'email'; then
     bashio::exit.nok "Option 'email' must be configured"
 fi
 
-if ! bashio::config.has_value 'inwx_username'; then
-    bashio::exit.nok "Option 'inwx_username' must be configured"
-fi
-
-if ! bashio::config.has_value 'inwx_password'; then
-    bashio::exit.nok "Option 'inwx_password' must be configured"
-fi
-
 EMAIL=$(bashio::config 'email')
 LEGO_PATH=$(sanitize_optional "$(bashio::config 'lego_path')")
 if [ -z "${LEGO_PATH}" ]; then
@@ -64,9 +56,46 @@ if [ -z "${STAGING}" ]; then
     STAGING="false"
 fi
 
+DNS_PROVIDER=$(sanitize_optional "$(bashio::config 'dns_provider')")
+if [ -z "${DNS_PROVIDER}" ]; then
+    bashio::exit.nok "Option 'dns_provider' must be configured"
+fi
+
+DNS_ENV_COUNT=$(bashio::config 'dns_provider_env | length' 2>/dev/null || echo 0)
+declare -a DNS_ENV_VARS=()
+declare -a DNS_ENV_KEYS=()
+if [ "${DNS_ENV_COUNT}" -gt 0 ]; then
+    for i in $(seq 0 $((DNS_ENV_COUNT - 1))); do
+        entry=$(sanitize_optional "$(bashio::config "dns_provider_env[${i}]")")
+        if [ -z "${entry}" ]; then
+            continue
+        fi
+        if [[ "${entry}" != *=* ]]; then
+            bashio::log.warning "Skipping dns_provider_env entry ${i} (missing '='): ${entry}"
+            continue
+        fi
+        key="${entry%%=*}"
+        value="${entry#*=}"
+        if [ -z "${key}" ]; then
+            bashio::log.warning "Skipping dns_provider_env entry ${i} (empty key)"
+            continue
+        fi
+        if [ -z "${value}" ]; then
+            bashio::log.warning "dns_provider_env entry ${i} has empty value for ${key}"
+        fi
+        DNS_ENV_KEYS+=("${key}")
+        DNS_ENV_VARS+=("${entry}")
+    done
+fi
+
 RESTART_ADDON_SLUG=$(sanitize_optional "$(bashio::config 'restart_addon_slug')")
 if [ -n "${RESTART_ADDON_SLUG}" ]; then
     bashio::log.info "Configured to restart add-on after certificate updates: ${RESTART_ADDON_SLUG}"
+fi
+
+bashio::log.info "DNS provider configured: ${DNS_PROVIDER}"
+if [ "${#DNS_ENV_KEYS[@]}" -gt 0 ]; then
+    bashio::log.info "DNS provider environment keys: ${DNS_ENV_KEYS[*]}"
 fi
 
 FORCE_INITIAL_REQUEST=$(sanitize_optional "$(bashio::config 'force_initial_request')")
@@ -76,11 +105,6 @@ fi
 if bashio::var.true "${FORCE_INITIAL_REQUEST}"; then
     bashio::log.warning "Force initial request enabled; existing lego state will be removed on startup"
 fi
-
-INWX_USERNAME=$(bashio::config 'inwx_username')
-INWX_PASSWORD=$(bashio::config 'inwx_password')
-INWX_SHARED_SECRET=$(sanitize_optional "$(bashio::config 'inwx_shared_secret')")
-INWX_TOTP=$(sanitize_optional "$(bashio::config 'inwx_totp')")
 
 mkdir -p "${LEGO_PATH}"
 chmod 700 "${LEGO_PATH}"
@@ -92,10 +116,23 @@ mkdir -p "$(dirname "${CONFIG_ENV_FILE}")"
     printf 'LEGO_PATH=%q\n' "${LEGO_PATH}"
     printf 'RENEW_DAYS=%q\n' "${RENEW_DAYS}"
     printf 'STAGING=%q\n' "${STAGING}"
-    printf 'INWX_USERNAME=%q\n' "${INWX_USERNAME}"
-    printf 'INWX_PASSWORD=%q\n' "${INWX_PASSWORD}"
-    printf 'INWX_SHARED_SECRET=%q\n' "${INWX_SHARED_SECRET}"
-    printf 'INWX_TOTP=%q\n' "${INWX_TOTP}"
+    printf 'DNS_PROVIDER=%q\n' "${DNS_PROVIDER}"
+    printf 'DNS_ENV_VARS=('
+    if [ "${#DNS_ENV_VARS[@]}" -gt 0 ]; then
+        printf '\n'
+        for entry in "${DNS_ENV_VARS[@]}"; do
+            printf '  %q\n' "${entry}"
+        done
+    fi
+    printf ')\n'
+    printf 'DNS_ENV_KEYS=('
+    if [ "${#DNS_ENV_KEYS[@]}" -gt 0 ]; then
+        printf '\n'
+        for key in "${DNS_ENV_KEYS[@]}"; do
+            printf '  %q\n' "${key}"
+        done
+    fi
+    printf ')\n'
     printf 'RESTART_ADDON_SLUG=%q\n' "${RESTART_ADDON_SLUG}"
     printf 'FORCE_INITIAL_REQUEST=%q\n' "${FORCE_INITIAL_REQUEST}"
     printf 'DOMAINS=('

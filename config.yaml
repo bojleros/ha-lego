@@ -1,7 +1,7 @@
-name: LEGO INWX Certificates
-version: "0.1.0-alpha.3"
-slug: lego-inwx
-description: Automate Let's Encrypt certificate issuance with lego and the INWX DNS challenge.
+name: LEGO DNS Certificates
+version: "0.1.0-alpha.4"
+slug: lego-dns
+description: Automate Let's Encrypt certificate issuance with lego using DNS challenges.
 url: https://github.com/deg0nz/letsencrypt-ha-plugin
 hassio_api: true
 hassio_role: manager
@@ -24,10 +24,8 @@ options:
   renew_days: 30
   lego_path: /data/lego
   staging: false
-  inwx_username: ""
-  inwx_password: ""
-  inwx_shared_secret: ""
-  inwx_totp: ""
+  dns_provider: inwx
+  dns_provider_env: []
   restart_addon_slug: ""
   force_initial_request: false
 schema:
@@ -39,9 +37,8 @@ schema:
   renew_days: int(1,)
   lego_path: str
   staging: bool
-  inwx_username: str
-  inwx_password: password
-  inwx_shared_secret: str?
-  inwx_totp: str?
+  dns_provider: str
+  dns_provider_env:
+    - str
   restart_addon_slug: str?
   force_initial_request: bool
