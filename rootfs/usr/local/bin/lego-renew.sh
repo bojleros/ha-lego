@@ -87,6 +87,8 @@ load_config() {
         LEGO_SERVER_HOST="${ACME_PRODUCTION_HOST}"
     fi
 
+    DNS_RESOLVERS=${DNS_RESOLVERS:-}
+
     DNS_PROVIDER=${DNS_PROVIDER:-}
     if [ -z "${DNS_PROVIDER}" ]; then
         error "Configuration option 'dns_provider' must be set"
@@ -114,6 +116,13 @@ load_config() {
 
 build_command() {
     LEGO_CMD=("${LEGO_BIN}" "--path" "${LEGO_PATH}" "--email" "${EMAIL}" "--accept-tos" "--dns" "${DNS_PROVIDER}" "--key-type" "${KEY_TYPE}")
+
+    if [ -n "${DNS_RESOLVERS}" ]; then
+
+        LEGO_CMD+=("--dns.resolvers" "${DNS_RESOLVERS}")
+
+    fi
+
 
     if [ "${STAGING}" = "true" ]; then
         LEGO_CMD+=("--server" "${ACME_STAGING_ENDPOINT}")

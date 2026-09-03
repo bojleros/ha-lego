@@ -25,6 +25,7 @@ options:
   lego_path: /data/lego
   staging: false
   dns_provider: inwx
+  dns_resolvers: ""
   dns_provider_env: []
   restart_addon_slug: ""
   force_initial_request: false
@@ -38,6 +39,7 @@ schema:
   lego_path: str
   staging: bool
   dns_provider: str
+  dns_resolvers: str
   dns_provider_env:
     - str
   restart_addon_slug: str?
