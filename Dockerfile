@@ -1,4 +1,4 @@
-FROM alpine:3.24
+FROM ghcr.io/home-assistant/base:latest
 
 RUN apk add --no-cache lego jq
 

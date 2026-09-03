@@ -61,6 +61,8 @@ if [ -z "${DNS_PROVIDER}" ]; then
     bashio::exit.nok "Option 'dns_provider' must be configured"
 fi
 
+DNS_RESOLVERS=$(sanitize_optional "$(bashio::config 'dns_resolvers')")
+
 DNS_ENV_COUNT=$(bashio::config 'dns_provider_env | length' 2>/dev/null || echo 0)
 declare -a DNS_ENV_VARS=()
 declare -a DNS_ENV_KEYS=()
@@ -117,6 +119,7 @@ mkdir -p "$(dirname "${CONFIG_ENV_FILE}")"
     printf 'RENEW_DAYS=%q\n' "${RENEW_DAYS}"
     printf 'STAGING=%q\n' "${STAGING}"
     printf 'DNS_PROVIDER=%q\n' "${DNS_PROVIDER}"
+    printf 'DNS_RESOLVERS=%q\n' "${DNS_RESOLVERS}"
     printf 'DNS_ENV_VARS=('
     if [ "${#DNS_ENV_VARS[@]}" -gt 0 ]; then
         printf '\n'
